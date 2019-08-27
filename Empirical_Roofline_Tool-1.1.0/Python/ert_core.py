@@ -2,7 +2,6 @@ import sys, operator, subprocess, os, glob, filecmp, math
 import socket, platform, time, json, optparse, ast
 
 import Python.ert_utils as ert_utils
-from functools import reduce
 
 def text_list_2_string(text_list):
   return reduce(operator.add, [t+" " for t in text_list])
@@ -233,7 +232,8 @@ class ert_core:
         ["-DERT_ALIGN=%s" % self.dict["CONFIG"]["ERT_ALIGN"][0]]                     + \
         ["-DERT_MEMORY_MAX=%s" % self.dict["CONFIG"]["ERT_MEMORY_MAX"][0]]           + \
         ["-DERT_WORKING_SET_MIN=%s" % self.dict["CONFIG"]["ERT_WORKING_SET_MIN"][0]] + \
-        ["-DERT_TRIALS_MIN=%s" % self.dict["CONFIG"]["ERT_TRIALS_MIN"][0]]
+        ["-DERT_TRIALS_MIN=%s" % self.dict["CONFIG"]["ERT_TRIALS_MIN"][0]]           + \
+        ["-DERT_WSS_MULT=%s" % self.dict["CONFIG"]["ERT_WSS_MULT"][0]]
 
       if self.dict["CONFIG"]["ERT_MPI"][0] == "True":
         command_prefix += ["-DERT_MPI"] + self.dict["CONFIG"]["ERT_MPI_CFLAGS"]
@@ -601,14 +601,14 @@ class ert_core:
     emp_gbytes_metadata = {}
     emp_gbytes_data = []
 
-    for i in range(0, len(gbyte)):
+    for i in xrange(0,len(gbyte)):
       if gbyte[i] == "META_DATA":
         break
       else:
         gbyte_split = gbyte[i].split()
         emp_gbytes_data.append([gbyte_split[1], float(gbyte_split[0])])
 
-    for j in range(i+1, len(gbyte)):
+    for j in xrange(i+1, len(gbyte)):
       metadata = gbyte[j]
 
       parts = metadata.partition(" ")
@@ -772,7 +772,7 @@ class ert_core:
           sys.stderr.write("Unable to open '%s'...\n" % loadname)
           return 1
 
-        for h in range(0, num_peak):
+        for h in xrange(0, num_peak):
           xgflops = 2.0
           label = '%.1f %s/sec (%s Maximum)' % (gflops_emp[h][0], gflops_emp[h][2], gflops_emp[h][1])
           plotfile.write("set label '%s' at %.7le,%.7le left textcolor rgb '#000080'\n" % (label, xgflops, 1.2*gflops_emp[h][0]))
@@ -791,7 +791,7 @@ class ert_core:
         alpha = 1.065
 
         label_over = True
-        for i in range(0, num_mem):
+        for i in xrange(0, num_mem):
           if i > 0:
             if label_over and gbytes_emp[i-1][0] / gbytes_emp[i][0] < 1.5:
               label_over = False
