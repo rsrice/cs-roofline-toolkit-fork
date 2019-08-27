@@ -1,5 +1,18 @@
-import sys, operator, subprocess, os, glob, filecmp, math
-import socket, platform, time, json, optparse, ast
+import sys
+import operator
+import subprocess
+import os
+import glob
+import filecmp
+import math
+import socket
+import platform
+import time
+import json
+import optparse
+import ast
+
+from functools import reduce
 
 import Python.ert_utils as ert_utils
 
@@ -28,6 +41,11 @@ class ert_core:
 
     self.metadata["HOSTNAME"] = hostname
     self.metadata["UNAME"] = platform.uname()
+    
+    self.exe_path = ""
+    self.flop = ""
+    self.flop_dir = ""
+
 
   def build_only(self, option, opt, value, parser):
     parser.values.build = True
@@ -47,21 +65,21 @@ class ert_core:
   def flags(self):
     parser = optparse.OptionParser(usage="%prog [-h] [--help] [options] config_file", version="%prog " + self.ert_version)
 
-    build_group = optparse.OptionGroup(parser, "Build options");
+    build_group = optparse.OptionGroup(parser, "Build options")
 
     build_group.add_option("--build", dest="build", action="store_true", default=True, help="Build the micro-kernels [default]")
     build_group.add_option("--no-build", dest="build", action="store_false", default=True, help="Don't build the micro-kernels")
     build_group.add_option("--build-only", dest="build", action="callback", callback=self.build_only, help="Only build the micro-kernels")
     parser.add_option_group(build_group)
 
-    run_group = optparse.OptionGroup(parser, "Run options");
+    run_group = optparse.OptionGroup(parser, "Run options")
 
     run_group.add_option("--run", dest="run", action="store_true", default=True, help="Run the micro-kernels [default]")
     run_group.add_option("--no-run", dest="run", action="store_false", default=True, help="Don't run the micro-kernels")
     run_group.add_option("--run-only", dest="run", action="callback", callback=self.run_only, help="Only run the micro-kernels")
     parser.add_option_group(run_group)
 
-    post_group = optparse.OptionGroup(parser, "Post-processing options");
+    post_group = optparse.OptionGroup(parser, "Post-processing options")
 
     post_group.add_option("--post", dest="post", action="store_true", default=True, help="Run the post-processing [default]")
     post_group.add_option("--no-post", dest="post", action="store_false", default=True, help="Don't run the post-processing")
@@ -197,12 +215,12 @@ class ert_core:
                 print("**")
                 print("*** WARNING ***")
 
-            command = ["mkdir", self.results_dir]
+            command = ["/bin/mkdir", self.results_dir]
             if ert_utils.execute_noshell(command, self.options.verbose > 1) != 0:
               sys.stderr.write("Unable to make new run directory, '%s'\n" % self.results_dir)
               return 1
 
-            command = ["cp", self.configure_filename, "%s/config.ert" % self.results_dir]
+            command = ["/bin/cp", self.configure_filename, "%s/config.ert" % self.results_dir]
             if ert_utils.execute_noshell(command, self.options.verbose > 1) != 0:
               sys.stderr.write("Unable to copy configuration file, '%s', into new run directory, %s\n" % (self.configure_filename, self.results_dir))
               return 1
@@ -268,7 +286,7 @@ class ert_core:
         if ert_utils.execute_noshell(command, self.options.verbose > 1) != 0:
           sys.stderr.write("Compiling kernel, %s, failed\n" % self.dict["CONFIG"]["ERT_KERNEL"][0])
           return 1
-
+   
       command = self.dict["CONFIG"]["ERT_LD"]      + \
                 self.dict["CONFIG"]["ERT_LDFLAGS"]
 
@@ -280,7 +298,7 @@ class ert_core:
 
       if self.dict["CONFIG"]["ERT_GPU"][0] == "True":
         command += self.dict["CONFIG"]["ERT_GPU_LDFLAGS"]
-
+      print(self.dict["CONFIG"]["ERT_OCL"][0] != "True")
       if self.dict["CONFIG"]["ERT_OCL"][0] != "True":
         command += ["%s/%s.o" % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0])] + \
                    ["%s/%s.o" % (self.flop_dir, self.dict["CONFIG"]["ERT_KERNEL"][0])] + \
@@ -290,7 +308,7 @@ class ert_core:
         command += ["%s/%s.o" % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0])] + \
                    self.dict["CONFIG"]["ERT_LDLIBS"]                                  + \
                    ["-o", "%s/%s" % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0])]
- 
+      print(" ".join(command))
       if ert_utils.execute_noshell(command, self.options.verbose > 1) != 0:
         sys.stderr.write("Linking code failed\n")
         return 1
@@ -301,7 +319,7 @@ class ert_core:
     try:
       output = open(outputname, "a")
     except IOError:
-      sys.stderr.write("Unable to open output file, %s, to add metadata\n" % outputfile)
+      sys.stderr.write("Unable to open output file, %s, to add metadata\n" % outputname)
       return 1
 
     for k, v in list(self.metadata.items()):
@@ -339,7 +357,7 @@ class ert_core:
 
             self.metadata["TIMESTAMP_DATA"] = time.time()
 
-            if execute_shell(cur_command,self.options.verbose > 1) != 0:
+            if ert_utils.execute_shell(cur_command,self.options.verbose > 1) != 0:
               sys.stderr.write("Unable to complete %s, experiment %d\n" % (run_dir,t))
               return 1
 
@@ -347,7 +365,7 @@ class ert_core:
               return 1
 
           command = ["touch","%s/run.done" % run_dir]
-          if execute_noshell(command,self.options.verbose > 1) != 0:
+          if ert_utils.execute_noshell(command,self.options.verbose > 1) != 0:
             sys.stderr.write("Unable to make 'run.done' file in %s\n" % run_dir)
             return 1
 
@@ -360,18 +378,18 @@ class ert_core:
     self.run_list = []
 
     if self.dict["CONFIG"]["ERT_MPI"][0] == "True":
-      mpi_procs_list = parse_int_list(self.dict["CONFIG"]["ERT_MPI_PROCS"][0])
+      mpi_procs_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_MPI_PROCS"][0])
     else:
       mpi_procs_list = [1]
 
     if self.dict["CONFIG"]["ERT_OPENMP"][0] == "True":
-      openmp_threads_list = parse_int_list(self.dict["CONFIG"]["ERT_OPENMP_THREADS"][0])
+      openmp_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_OPENMP_THREADS"][0])
     else:
       openmp_threads_list = [1]
 
     if self.dict["CONFIG"]["ERT_MPI"][0] == "True":
       if self.dict["CONFIG"]["ERT_OPENMP"][0] == "True":
-        procs_threads_list = parse_int_list(self.dict["CONFIG"]["ERT_PROCS_THREADS"][0])
+        procs_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_PROCS_THREADS"][0])
       else:
         procs_threads_list = mpi_procs_list
     else:
@@ -382,7 +400,7 @@ class ert_core:
 
     num_experiments = int(self.dict["CONFIG"]["ERT_NUM_EXPERIMENTS"][0])
 
-    base_command = list_2_string(self.dict["CONFIG"]["ERT_RUN"])
+    base_command = ert_utils.list_2_string(self.dict["CONFIG"]["ERT_RUN"])
 
     for mpi_procs in mpi_procs_list:
       for openmp_threads in openmp_threads_list:
@@ -397,7 +415,7 @@ class ert_core:
           else:
             mpi_dir = self.flop_dir
           if self.options.run:
-            make_dir_if_needed(mpi_dir,"run",self.options.verbose > 1)
+            ert_utils.make_dir_if_needed(mpi_dir,"run",self.options.verbose > 1)
 
           if self.dict["CONFIG"]["ERT_OPENMP"][0] == "True":
             openmp_dir = "%s/OpenMP.%04d" % (mpi_dir,openmp_threads)
@@ -406,14 +424,14 @@ class ert_core:
           else:
             openmp_dir = mpi_dir
           if self.options.run:
-            make_dir_if_needed(openmp_dir,"run",self.options.verbose > 1)
+            ert_utils.make_dir_if_needed(openmp_dir,"run",self.options.verbose > 1)
 
           if self.dict["CONFIG"]["ERT_GPU"][0] == "True":
             gpu_command = command.replace("ERT_CODE","%s/%s.%s" 
                       % (self.flop_dir,self.dict["CONFIG"]["ERT_DRIVER"][0],self.dict["CONFIG"]["ERT_KERNEL"][0]))
-            gpu_blocks_list = parse_int_list(self.dict["CONFIG"]["ERT_GPU_BLOCKS"][0])
-            gpu_threads_list = parse_int_list(self.dict["CONFIG"]["ERT_GPU_THREADS"][0])
-            blocks_threads_list = parse_int_list(self.dict["CONFIG"]["ERT_BLOCKS_THREADS"][0])
+            gpu_blocks_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_GPU_BLOCKS"][0])
+            gpu_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_GPU_THREADS"][0])
+            blocks_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_BLOCKS_THREADS"][0])
             for gpu_blocks in gpu_blocks_list:
               for gpu_threads in gpu_threads_list:
                 if gpu_blocks * gpu_threads in blocks_threads_list:
@@ -421,12 +439,12 @@ class ert_core:
                   gpu_dir = "%s/GPU_Blocks.%04d" % (openmp_dir,gpu_blocks)
                   print_str = base_str + "GPU blocks %d, " % gpu_blocks
                   if self.options.run:
-                    make_dir_if_needed(gpu_dir,"run",self.options.verbose > 1)
+                    ert_utils.make_dir_if_needed(gpu_dir,"run",self.options.verbose > 1)
 
                   run_dir = "%s/GPU_Threads.%04d" % (gpu_dir,gpu_threads)
                   print_str += "GPU threads %d, " % gpu_threads
                   if self.options.run:
-                    make_dir_if_needed(run_dir,"run",self.options.verbose > 1)
+                    ert_utils.make_dir_if_needed(run_dir,"run",self.options.verbose > 1)
 
                   self.run_list.append(run_dir)
                   submit(command, run_dir, print_str)
@@ -443,7 +461,7 @@ class ert_core:
                 print_str = base_str + "Global size %d, Local size %d  " % (ocl_global, ocl_local)
 
                 if self.options.run:
-                  make_dir_if_needed(run_dir, "run", self.options.verbose > 1)
+                  ert_utils.make_dir_if_needed(run_dir, "run", self.options.verbose > 1)
 
                 self.run_list.append(run_dir)
                 submit(command, run_dir, print_str)
@@ -471,17 +489,17 @@ class ert_core:
           print("   ", run)
 
         command = ["cat %s/try.* | %s/Scripts/preprocess.py > %s/pre" % (run, self.exe_path, run)]
-        if execute_shell(command, self.options.verbose > 1) != 0:
+        if ert_utils.execute_shell(command, self.options.verbose > 1) != 0:
           sys.stderr.write("Unable to process %s\n" % run)
           return 1
 
         command = ["%s/Scripts/maximum.py < %s/pre > %s/max" % (self.exe_path, run, run)]
-        if execute_shell(command, self.options.verbose > 1) != 0:
+        if ert_utils.execute_shell(command, self.options.verbose > 1) != 0:
           sys.stderr.write("Unable to process %s\n" % run)
           return 1
 
         command = ["%s/Scripts/summary.py < %s/max > %s/sum" % (self.exe_path, run, run)]
-        if execute_shell(command, self.options.verbose > 1) != 0:
+        if ert_utils.execute_shell(command, self.options.verbose > 1) != 0:
           sys.stderr.write("Unable to process %s\n" % run)
           return 1
 
@@ -502,12 +520,14 @@ class ert_core:
     command += "-e 's#ERT_GRAPH#%s/%s#g' " % (run_dir, name)
 
     command += "< %s/Plot/%s.gnu.template > %s/%s.gnu" % (self.exe_path, name, run_dir, name)
-    if execute_shell(command, False) != 0:
+
+    print("change this", command) # TO DO: fix this
+    if ert_utils.execute_shell(command, False) != 0:
       sys.stderr.write("Unable to produce a '%s' gnuplot file for %s\n" % (name, run_dir))
       return 1
 
     command = "echo 'load \"%s/%s.gnu\"' | %s" % (run_dir, name, self.dict["CONFIG"]["ERT_GNUPLOT"][0])
-    if execute_shell(command, self.options.verbose > 1) != 0:
+    if ert_utils.execute_shell(command, self.options.verbose > 1) != 0:
       sys.stderr.write("Unable to produce a '%s' for %s\n" % (name, run_dir))
       return 1
 
@@ -687,7 +707,7 @@ class ert_core:
         depth_string += "/*"
 
       command = "cat %s%s/sum | %s/Scripts/roofline.py" % (self.results_dir, depth_string, self.exe_path)
-      result = stdout_shell(command, self.options.verbose > 1)
+      result = ert_utils.stdout_shell(command, self.options.verbose > 1)
       if result[0] != 0:
         sys.stderr.write("Unable to create final roofline results\n")
         return 1
@@ -762,7 +782,7 @@ class ert_core:
         command += "-e 's#ERT_GRAPH#%s/%s#g' " % (self.results_dir, basename)
 
         command += "< %s/Plot/%s.gnu.template > %s" % (self.exe_path, basename, loadname)
-        if execute_shell(command, False) != 0:
+        if ert_utils.execute_shell(command, False) != 0:
           sys.stderr.write("Unable to produce a '%s' gnuplot file for %s\n" % (loadname, self.results_dir))
           return 1
 
@@ -829,7 +849,7 @@ class ert_core:
         plotfile.close()
 
         command = "echo 'load \"%s\"' | %s" % (loadname, self.dict["CONFIG"]["ERT_GNUPLOT"][0])
-        if execute_shell(command, self.options.verbose > 1) != 0:
+        if ert_utils.execute_shell(command, self.options.verbose > 1) != 0:
           sys.stderr.write("Unable to produce a '%s' for %s\n" % (basename, self.results_dir))
           return 1
 

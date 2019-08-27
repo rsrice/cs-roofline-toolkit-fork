@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 # Import builtin Python modules
-import sys, os.path
+import sys
+import os.path
 
 # Import ERT python modules
 from Python.ert_core  import ert_core
