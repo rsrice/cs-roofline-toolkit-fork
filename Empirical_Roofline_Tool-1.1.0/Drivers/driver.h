@@ -49,6 +49,31 @@
   #define cudaDeviceReset hipDeviceReset
   #define cudaSuccess hipSuccess
   #define cudaGetErrorString hipGetErrorString
+  #define cudaEvent_t hipEvent_t
+  #define cudaEventCreate hipEventCreate
+  #define cudaEventRecord hipEventRecord
+  #define cudaEventSynchronize hipEventSynchronize
+  #define cudaEventElapsedTime hipEventElapsedTime
 #endif
 
-#endif
+#ifdef ERT_OCL
+  #include <CL/cl.hpp>
+  #include <iostream>
+  #include <fstream>
+  #include <string>
+  #include <cstdlib>
+  #include <vector>
+
+  #ifndef DEVICE
+  //#define DEVICE CL_DEVICE_TYPE_ACCELERATOR
+  #define DEVICE CL_DEVICE_TYPE_GPU
+  #endif
+
+  size_t            global_size;
+  size_t            local_size;
+  //cl::Context       context;
+  //cl::CommandQueue  queue;
+  //cl::Program       program;
+#endif 
+
+#endif  // ERT_DRIVER_H

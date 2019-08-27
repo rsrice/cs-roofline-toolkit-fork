@@ -17,6 +17,19 @@ double getTime()
   return time;
 }
 
+#ifdef ERT_OCL
+inline std::string loadProgram(std::string input)
+{
+  std::ifstream stream(input.c_str());
+  if (!stream.is_open()) {
+    std::cout << "Cannot open file: " << input << std::endl;
+    exit(1);
+  }
+
+  return std::string(std::istreambuf_iterator<char>(stream), (std::istreambuf_iterator<char>()));
+}
+#endif
+
 template <typename T>
 inline void checkBuffer(T *buffer)
 {
@@ -70,6 +83,23 @@ inline void setGPU(const int id)
 }
 #endif
 
+#ifdef ERT_OCL
+inline void launchKernel(uint64_t n, uint64_t t, cl::Program program, cl::CommandQueue queue,
+		         cl::Buffer d_buf, cl::Buffer d_params, cl::Event *event)
+{
+  auto ocl_kernel = cl::make_kernel<ulong, ulong, cl::Buffer, cl::Buffer>(program, "ocl_kernel");
+
+  if ((global_size != 0) && (local_size != 0))
+    *event = ocl_kernel(cl::EnqueueArgs(queue, cl::NDRange(global_size), cl::NDRange(local_size)), 
+               n, t, d_buf, d_params);
+  else if ((global_size == 0) && (local_size != 0))
+    *event = ocl_kernel(cl::EnqueueArgs(queue, cl::NDRange(n), cl::NDRange(local_size)), 
+               n, t, d_buf, d_params);
+  else
+    *event = ocl_kernel(cl::EnqueueArgs(queue, cl::NDRange(n)), 
+               n, t, d_buf, d_params);
+}
+#else
 template <typename T>
 inline void launchKernel(uint64_t n, uint64_t t, uint64_t nid, T *buf, T *d_buf, int *bytes_per_elem_ptr,
                          int *mem_accesses_per_elem_ptr)
@@ -85,6 +115,7 @@ inline void launchKernel(uint64_t n, uint64_t t, uint64_t nid, T *buf, T *d_buf,
   kernel<T>(n, t, &buf[nid], bytes_per_elem_ptr, mem_accesses_per_elem_ptr);
 #endif
 }
+#endif
 
 template <typename T>
 void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
@@ -116,6 +147,51 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
 
 #if ERT_GPU
     setGPU(id);
+#elif ERT_OCL
+    // Define the Platform and determine the number of devices
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    std::vector<cl::Device> devices;
+    int cl_err;
+    if ((cl_err = platforms[0].getDevices(DEVICE, &devices)) != CL_SUCCESS) {
+      switch (cl_err) {
+        case CL_INVALID_DEVICE_TYPE: 
+          fprintf(stderr, "ERROR: Invalide OpenCL device type\n");
+	  break;
+	default:
+          fprintf(stderr, "ERROR: Invalide OpenCL device not found\n");
+      }
+      exit(1);
+    }
+
+    // Map the Device to an id, create a Context and queue for it
+    int num_devices = devices.size();
+    cl::Device device = devices[id % num_devices];
+    cl::Context context(device);
+    cl::CommandQueue queue(context, CL_QUEUE_PROFILING_ENABLE);
+    // Check that maximum working group size isn't exceeded
+    size_t max_wg_size = device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
+    if (local_size > max_wg_size) {
+      fprintf(stderr, "ERROR: Work group size > device maximum %ld\n", max_wg_size);
+      exit(1);
+    }
+ 
+    // Build the OpenCL kernel
+#ifdef ERT_FP16
+  #define PRECISION "FP16"
+#elif ERT_FP32
+  #define PRECISION "FP32"
+#else
+  #define PRECISION "FP64"
+#endif
+    char build_args[80];
+    sprintf(build_args, "Kernels/%s", ERT_KERNEL);
+    cl::Program program(context, loadProgram(build_args), false);
+    sprintf(build_args, "-DERT_FLOP=%d -D%s", ERT_FLOP, PRECISION);
+    if (program.build(build_args) != CL_SUCCESS) {
+      fprintf(stderr, "ERROR: OpenCL kernel failed to build\n");
+      exit(-1);
+    }
 #endif
 
     int nthreads   = *nthreads_ptr;
@@ -127,14 +203,20 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
 #if ERT_GPU
     T *d_buf = setDeviceData<T>(nsize);
     cudaDeviceSynchronize();
+#elif ERT_OCL
+    int params[2];
+    cl::Buffer d_params(context, CL_MEM_READ_WRITE, sizeof(params));
+    cl::Buffer d_buf(context, CL_MEM_READ_WRITE, sizeof(T) * nsize);
 #else
     T *d_buf = nullptr;
 #endif
 
-#if defined (ERT_GPU) && !defined (ERT_HIP)
+#if defined (ERT_GPU)
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
+#elif ERT_OCL
+    cl::Event event;
 #else
     double startTime, endTime;
 #endif
@@ -147,19 +229,21 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
     while (n <= nsize) { // working set - nsize
 
       uint64_t ntrials = nsize / n;
-      if (ntrials < 1)
-        ntrials = 1;
+      if (ntrials < ERT_TRIALS_MIN)
+        ntrials = ERT_TRIALS_MIN;
 
       // initialize small chunck of buffer within each thread
       double value = -1.0;
       initialize<T>(nsize, &buf[nid], value);
 
-      for (t = ERT_TRIALS_MIN; t <= ntrials; t = t * 2) { // working set - ntrials
 #ifdef ERT_GPU
-        cudaMemcpy(d_buf, &buf[nid], n * sizeof(T), cudaMemcpyHostToDevice);
-        cudaDeviceSynchronize();
+      cudaMemcpy(d_buf, &buf[nid], n * sizeof(T), cudaMemcpyHostToDevice);
+      cudaDeviceSynchronize();
+#elif  ERT_OCL
+      cl::copy(queue, &buf[nid], &buf[nid] + n, d_buf);
 #endif
 
+      for (t = 1; t <= ntrials; t = t * 2) { // working set - ntrials
 #ifdef ERT_MPI
 #ifdef ERT_OPENMP
 #pragma omp master
@@ -174,14 +258,21 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
 #endif
 
         if ((id == 0) && (rank == 0)) {
-#if defined (ERT_GPU) && !defined (ERT_HIP)
+#if defined (ERT_GPU)
           cudaEventRecord(start);
+#elif ERT_OCL
 #else
           startTime = getTime();
 #endif
         }
 
+#ifdef ERT_OCL
+        launchKernel(n, t, program, queue, d_buf, d_params, &event);
+        queue.finish();
+	event.wait();
+#else
         launchKernel<T>(n, t, nid, buf, d_buf, &bytes_per_elem, &mem_accesses_per_elem);
+#endif
 
 #ifdef ERT_OPENMP
 #pragma omp barrier
@@ -197,16 +288,22 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
 #endif // ERT_MPI
 
         if ((id == 0) && (rank == 0)) {
-#if defined (ERT_GPU) && !defined (ERT_HIP)
+#if defined (ERT_GPU)
           cudaEventRecord(stop);
+#elif ERT_OCL
 #else
           endTime   = getTime();
 #endif
         }
 
 #if ERT_GPU
-        cudaMemcpy(&buf[nid], d_buf, n * sizeof(T), cudaMemcpyDeviceToHost);
+        //cudaMemcpy(&buf[nid], d_buf, n * sizeof(T), cudaMemcpyDeviceToHost);
         cudaDeviceSynchronize();
+#elif  ERT_OCL
+        cl::copy(queue, d_params, params, params + 2);
+        bytes_per_elem = params[0];
+        mem_accesses_per_elem = params[1];
+	//cl::copy(queue, d_buf, &buf[nid], &buf[nid] + n);
 #endif
 
         if ((id == 0) && (rank == 0)) {
@@ -216,11 +313,14 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
           double seconds;
 
           // nsize; trials; microseconds; bytes; single thread bandwidth; total bandwidth
-#if defined (ERT_GPU) && !defined (ERT_HIP)
+#if defined (ERT_GPU)
           cudaEventSynchronize(stop);
           float milliseconds = 0.f;
           cudaEventElapsedTime(&milliseconds, start, stop);
           seconds = static_cast<double>(milliseconds) / 1000.;
+#elif ERT_OCL
+	  seconds = (double)(event.getProfilingInfo<CL_PROFILING_COMMAND_END>() 
+	            - event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) * 1e-9;
 #else
           endTime   = getTime();
           seconds   = endTime - startTime;
@@ -231,7 +331,7 @@ void run(uint64_t PSIZE, T *buf, int rank, int nprocs, int *nthreads_ptr)
 
       } // working set - ntrials
 
-      nNew = 1.1 * n;
+      nNew = ERT_WSS_MULT * n;
       if (nNew == n) {
         nNew = n + 1;
       }
@@ -261,6 +361,19 @@ int main(int argc, char *argv[])
 
   gpu_blocks  = atoi(argv[1]);
   gpu_threads = atoi(argv[2]);
+#elif ERT_OCL
+  if (argc == 2) {                   // Usage: driver local_size
+    global_size = 0;
+    local_size = atoi(argv[1]);
+  }
+  else if ( argc == 3 ) {            // Usage: driver global_size local_size
+    global_size = atoi(argv[1]);
+    local_size  = atoi(argv[2]);
+  }
+  else {                             // No args, let the OpenCL runtime decide
+    global_size = 0;
+    local_size = 0;
+  }
 #endif
 
   int rank     = 0;
@@ -343,6 +456,11 @@ int main(int argc, char *argv[])
 #ifdef ERT_GPU
     printf("GPU_BLOCKS     %d\n", gpu_blocks);
     printf("GPU_THREADS    %d\n", gpu_threads);
+#endif
+
+#ifdef ERT_OCL
+    printf("GLOBAL_SIZE    %ld\n", global_size);
+    printf("LOCAL_SIZE     %ld\n", local_size);
 #endif
   }
 
