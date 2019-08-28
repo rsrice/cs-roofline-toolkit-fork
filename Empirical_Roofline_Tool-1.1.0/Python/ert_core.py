@@ -16,6 +16,7 @@ from functools import reduce
 
 import Python.ert_utils as ert_utils
 
+
 def text_list_2_string(text_list):
   return reduce(operator.add, [t+" " for t in text_list])
 
@@ -621,12 +622,19 @@ class ert_core:
     emp_gbytes_metadata = {}
     emp_gbytes_data = []
 
+    
     for i in range(0, len(gbyte)):
       if gbyte[i] == "META_DATA":
         break
       else:
         gbyte_split = gbyte[i].split()
         emp_gbytes_data.append([gbyte_split[1], float(gbyte_split[0])])
+
+    # in case len(gbyte) is zero
+    try:
+      i
+    except NameError:
+      i = int(0)
 
     for j in range(i+1, len(gbyte)):
       metadata = gbyte[j]
@@ -712,14 +720,21 @@ class ert_core:
         sys.stderr.write("Unable to create final roofline results\n")
         return 1
 
-      lines = result[1].split("\n")
+      #lines = result[1].split("\n")
+      # remove whitespace, from utf-8 split by lines 
+      lines = [line.strip() for line in result[1].decode("utf-8").split("\n")]
 
       for i in range(0, len(lines)):
         if len(lines[i]) == 0:
           break
+      
+      # TODO: handle in case len(lines) is zero:
 
       gflop_lines = lines[:i]
       gbyte_lines = lines[i+1:-1]
+
+      # print(gflop_lines)
+      # print(gbyte_lines)
 
       database = self.build_database(gflop_lines, gbyte_lines)
 
@@ -737,7 +752,8 @@ class ert_core:
       for i in range(0, len(gflop_lines)):
         if gflop_lines[i] == "META_DATA":
           break
-
+      # TODO: handle in case len(gflop_lines) is zero
+ 
       num_peak = i
       gflops_emp = num_peak * [0]
 
@@ -748,6 +764,7 @@ class ert_core:
       for i in range(0, len(gbyte_lines)):
         if gbyte_lines[i] == "META_DATA":
           break
+      # TODO: handle in case len(gbyte_lines) is zero
 
       num_mem = i
       gbytes_emp = num_mem * [0]

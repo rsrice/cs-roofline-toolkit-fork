@@ -8,6 +8,8 @@ import os.path
 from Python.ert_core  import ert_core
 import Python.ert_utils as ert_utils
 
+sys.stdout.reconfigure(encoding='utf-8')
+
 # Get the path to the directory where this was run
 exe_path = os.path.dirname(sys.argv[0])
 if exe_path == "":

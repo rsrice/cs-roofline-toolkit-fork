@@ -73,7 +73,7 @@ for pkey in sorted(data.keys()):
       msec_min = stats[STATS.msec_min]
 
       msec_med = sorted(stats[STATS.msec_med])
-      msec_med = msec_med[len(msec_med)/2]
+      msec_med = msec_med[len(msec_med)//2]
 
       msec_max = stats[STATS.msec_max]
 

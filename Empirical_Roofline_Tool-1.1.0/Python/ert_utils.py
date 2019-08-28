@@ -4,6 +4,7 @@ import sys
 import os
 from functools import reduce
 
+
 # Make a list into a space seperated string
 def list_2_string(text_list):
   return reduce(operator.add, [t+" " for t in text_list])
