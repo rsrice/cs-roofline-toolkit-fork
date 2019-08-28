@@ -38,7 +38,7 @@ flops_list = ert_utils.parse_int_list(ert.dict["CONFIG"]["ERT_FLOPS"][0])
 for flop in flops_list:
   # A bit of output if any verbosity has been requested
   if ert.options.verbose > 0:
-    print("FLOP count %d..." % flop)
+    print(("FLOP count %d..." % flop))
     sys.stdout.flush()
 
   # Set the ERT object flops/element
