@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-import os,sys
-from util import PRECISION,INPUT,STATS,MEGA,GIGA
+import os
+import sys
+from util import PRECISION, INPUT, STATS, MEGA, GIGA
 
 data = dict()
 metadata = {}
@@ -103,6 +104,6 @@ for pkey in sorted(data.keys()):
     print("")
 
 print("META_DATA")
-for k,m in list(metadata.items()):
+for k, m in list(metadata.items()):
   if k != "META_DATA":
     print(k)

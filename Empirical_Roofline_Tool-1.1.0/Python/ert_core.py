@@ -349,23 +349,23 @@ class ert_core:
           if self.options.verbose > 0:
             print( "    %s" % print_str)
 
-          for t in range(1,num_experiments+1):
-            output = "%s/try.%03d" % (run_dir,t) 
+          for t in range(1, num_experiments+1):
+            output = "%s/try.%03d" % (run_dir, t) 
 
             cur_command = command
-            cur_command = cur_command.replace("ERT_TRY_NUM","%03d" % t)
+            cur_command = cur_command.replace("ERT_TRY_NUM", "%03d" % t)
 
             self.metadata["TIMESTAMP_DATA"] = time.time()
 
-            if ert_utils.execute_shell(cur_command,self.options.verbose > 1) != 0:
-              sys.stderr.write("Unable to complete %s, experiment %d\n" % (run_dir,t))
+            if ert_utils.execute_shell(cur_command, self.options.verbose > 1) != 0:
+              sys.stderr.write("Unable to complete %s, experiment %d\n" % (run_dir, t))
               return 1
 
             if self.add_metadata(output) != 0:
               return 1
 
-          command = ["touch","%s/run.done" % run_dir]
-          if ert_utils.execute_noshell(command,self.options.verbose > 1) != 0:
+          command = ["touch", "%s/run.done" % run_dir]
+          if ert_utils.execute_noshell(command, self.options.verbose > 1) != 0:
             sys.stderr.write("Unable to make 'run.done' file in %s\n" % run_dir)
             return 1
 
@@ -409,26 +409,26 @@ class ert_core:
           command = base_command
 
           if self.dict["CONFIG"]["ERT_MPI"][0] == "True":
-            mpi_dir = "%s/MPI.%04d" % (self.flop_dir,mpi_procs)
+            mpi_dir = "%s/MPI.%04d" % (self.flop_dir, mpi_procs)
             base_str += "MPI %d, " % mpi_procs
-            command = command.replace("ERT_MPI_PROCS",str(mpi_procs))
+            command = command.replace("ERT_MPI_PROCS", str(mpi_procs))
           else:
             mpi_dir = self.flop_dir
           if self.options.run:
-            ert_utils.make_dir_if_needed(mpi_dir,"run",self.options.verbose > 1)
+            ert_utils.make_dir_if_needed(mpi_dir, "run", self.options.verbose > 1)
 
           if self.dict["CONFIG"]["ERT_OPENMP"][0] == "True":
-            openmp_dir = "%s/OpenMP.%04d" % (mpi_dir,openmp_threads)
+            openmp_dir = "%s/OpenMP.%04d" % (mpi_dir, openmp_threads)
             base_str += "OpenMP %d, " % openmp_threads
-            command = command.replace("ERT_OPENMP_THREADS",str(openmp_threads))
+            command = command.replace("ERT_OPENMP_THREADS", str(openmp_threads))
           else:
             openmp_dir = mpi_dir
           if self.options.run:
-            ert_utils.make_dir_if_needed(openmp_dir,"run",self.options.verbose > 1)
+            ert_utils.make_dir_if_needed(openmp_dir, "run", self.options.verbose > 1)
 
           if self.dict["CONFIG"]["ERT_GPU"][0] == "True":
-            gpu_command = command.replace("ERT_CODE","%s/%s.%s" 
-                      % (self.flop_dir,self.dict["CONFIG"]["ERT_DRIVER"][0],self.dict["CONFIG"]["ERT_KERNEL"][0]))
+            gpu_command = command.replace("ERT_CODE", "%s/%s.%s" 
+                      % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0], self.dict["CONFIG"]["ERT_KERNEL"][0]))
             gpu_blocks_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_GPU_BLOCKS"][0])
             gpu_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_GPU_THREADS"][0])
             blocks_threads_list = ert_utils.parse_int_list(self.dict["CONFIG"]["ERT_BLOCKS_THREADS"][0])
@@ -436,21 +436,21 @@ class ert_core:
               for gpu_threads in gpu_threads_list:
                 if gpu_blocks * gpu_threads in blocks_threads_list:
                   command = gpu_command + "%d %d" % (gpu_blocks, gpu_threads)
-                  gpu_dir = "%s/GPU_Blocks.%04d" % (openmp_dir,gpu_blocks)
+                  gpu_dir = "%s/GPU_Blocks.%04d" % (openmp_dir, gpu_blocks)
                   print_str = base_str + "GPU blocks %d, " % gpu_blocks
                   if self.options.run:
-                    ert_utils.make_dir_if_needed(gpu_dir,"run",self.options.verbose > 1)
+                    ert_utils.make_dir_if_needed(gpu_dir, "run", self.options.verbose > 1)
 
-                  run_dir = "%s/GPU_Threads.%04d" % (gpu_dir,gpu_threads)
+                  run_dir = "%s/GPU_Threads.%04d" % (gpu_dir, gpu_threads)
                   print_str += "GPU threads %d, " % gpu_threads
                   if self.options.run:
-                    ert_utils.make_dir_if_needed(run_dir,"run",self.options.verbose > 1)
+                    ert_utils.make_dir_if_needed(run_dir, "run", self.options.verbose > 1)
 
                   self.run_list.append(run_dir)
                   submit(command, run_dir, print_str)
 
           elif self.dict["CONFIG"]["ERT_OCL"][0] == "True":
-            ocl_command = command.replace("ERT_CODE","%s/%s" % (self.flop_dir,self.dict["CONFIG"]["ERT_DRIVER"][0]))
+            ocl_command = command.replace("ERT_CODE", "%s/%s" % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0]))
             ocl_list = self.dict["CONFIG"]["ERT_OCL_SIZES"][0].split(',')
             for ocl_pair in ocl_list:
                 ocl_pair = ocl_pair.split(':')
@@ -467,8 +467,8 @@ class ert_core:
                 submit(command, run_dir, print_str)
 
           else:
-            command = command.replace("ERT_CODE","%s/%s.%s" 
-                      % (self.flop_dir,self.dict["CONFIG"]["ERT_DRIVER"][0],self.dict["CONFIG"]["ERT_KERNEL"][0]))
+            command = command.replace("ERT_CODE", "%s/%s.%s" 
+                      % (self.flop_dir, self.dict["CONFIG"]["ERT_DRIVER"][0], self.dict["CONFIG"]["ERT_KERNEL"][0]))
             run_dir = openmp_dir
             print_str = base_str
             self.run_list.append(run_dir)
@@ -621,7 +621,7 @@ class ert_core:
     emp_gbytes_metadata = {}
     emp_gbytes_data = []
 
-    for i in range(0,len(gbyte)):
+    for i in range(0, len(gbyte)):
       if gbyte[i] == "META_DATA":
         break
       else:
