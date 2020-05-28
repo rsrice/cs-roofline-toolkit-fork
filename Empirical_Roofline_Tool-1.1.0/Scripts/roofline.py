@@ -31,10 +31,10 @@ for line in sys.stdin:
   prevLine = line
 files[key] = data
 
-for key in sorted(files.iterkeys()):
+for key in sorted(files.keys()):
   info = files[key]
   index = 0
-  for i in xrange(0,len(info)):
+  for i in range(0,len(info)):
     m = info[i].split()
     if len(m) == 3 and m[1][0:2] == 'FP' and m[2] == "GFLOPs":
       flops_value = float(m[0])
@@ -42,7 +42,7 @@ for key in sorted(files.iterkeys()):
         max_gflops_value = flops_value
         max_flop  = []
         temp_list = []
-        for j in xrange(0,i+1):
+        for j in range(0,i+1):
           temp_list.append(info[j].strip() + " EMP\n")
         max_flop.append(temp_list)
         save_flop_meta = True
@@ -58,7 +58,7 @@ for key in sorted(files.iterkeys()):
         max_flop.append(info[i:])
       if save_band_meta:
         temp_list = []
-        for j in xrange(index,i-1):
+        for j in range(index,i-1):
           temp_list.append(info[j].strip() + " EMP\n")
         max_band.append(temp_list)
         max_band.append(info[i:])
@@ -67,9 +67,9 @@ for key in sorted(files.iterkeys()):
         
 for m in max_flop:
   for l in m:
-    print l,
-print ""
+    print(l, end=' ')
+print("")
 
 for m in max_band:
   for l in m:
-    print l,
+    print(l, end=' ')
