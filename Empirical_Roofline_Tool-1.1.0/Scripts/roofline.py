@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os,sys
 from util import PRECISION
@@ -64,7 +64,7 @@ for key in sorted(files.keys()):
         max_band.append(info[i:])
   save_flop_meta = False
   save_band_meta = False
-        
+
 for m in max_flop:
   for l in m:
     print(l, end=' ')

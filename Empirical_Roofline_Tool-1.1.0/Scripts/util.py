@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import enum
 
@@ -8,7 +8,7 @@ class PRECISION(enum.Enum):
   fp32   = 2
   fp64   = 3
   tensor = 4
-  
+
 class INPUT:
   size = 5
 
