@@ -34,9 +34,9 @@ files[key] = data
 # Get reference index
 tmp_file = files[len(files) - 1]
 ref_index = 0
-for i in xrange(0,len(tmp_file)):
+for i in range(0,len(tmp_file)):
   m = tmp_file[i].split()
-  for j in xrange(0, 4):
+  for j in range(0, 4):
     if len(m) == 3 and m[1] == PRECISION(j).name.upper() and m[2] == "GFLOPs":
       ref_index = j
 
